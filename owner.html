@@ -22,15 +22,29 @@
     </header>
 
     <main class="owner-page">
-      <section class="owner-heading">
-        <div>
-          <p>Operação</p>
-          <h1>Agendamentos de hoje</h1>
-        </div>
-        <div class="owner-tools muted">CSV/export e analytics: espaço futuro</div>
+      <section id="owner-login" class="owner-panel owner-auth">
+        <h1>Acesso ao painel</h1>
+        <form id="owner-login-form" class="auth-form">
+          <label>Senha do painel
+            <input id="admin-token" type="password" autocomplete="current-password" required />
+          </label>
+          <button class="button primary" type="submit">Entrar</button>
+        </form>
+        <div id="login-warning" class="notice hidden">Acesso não autorizado</div>
       </section>
 
-      <section class="owner-panel">
+      <section id="owner-app" class="hidden">
+        <section class="owner-heading">
+          <div>
+            <p>Operação</p>
+            <h1>Agendamentos de hoje</h1>
+          </div>
+          <div class="owner-tools">
+            <button id="export-csv" class="button secondary" type="button">Exportar CSV</button>
+          </div>
+        </section>
+
+        <section class="owner-panel">
         <div class="filters-row">
           <label>
             Data
@@ -56,6 +70,7 @@
             <tbody id="bookings-body"></tbody>
           </table>
         </div>
+        </section>
       </section>
     </main>
   </body>
