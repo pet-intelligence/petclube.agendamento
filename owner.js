@@ -1,4 +1,4 @@
-const API_BASE_URL = (window.PETCLUB_API_URL || "").replace(/\/$/, "");
+const API_BASE_URL = (window.PETCLUB_API_URL || "https://api.petintelligence.com.br").replace(/\/$/, "");
 const STATUSES = ["Novo", "Confirmado", "Em atendimento", "Pronto", "Finalizado", "Cancelado"];
 
 let bookings = [];
