@@ -186,8 +186,14 @@ async function loadAvailability() {
   try {
     const availability = await apiRequest(`/api/availability?date=${encodeURIComponent(dateInput.value)}`);
     warning.classList.add("hidden");
-    renderSlots(availability.slots || []);
+    renderAvailability(availability);
   } catch (error) {
+    if (error.status === 409) {
+      warning.textContent = "Este horário acabou de ser reservado. Por favor, escolha outro horário.";
+      warning.classList.remove("hidden");
+      await loadAvailability();
+      return;
+    }
     const online = await checkBackendHealth();
     if (!online) {
       warning.textContent = "Backend indisponível. O formulário continua aberto, mas a disponibilidade não pode ser confirmada agora.";
@@ -207,6 +213,12 @@ function updateDateMessage() {
     ? "Domingo estamos fechados. Escolha outro dia para agilizar a confirmação."
     : `${hours.label}: atendimento das ${hours.open} às ${hours.close}.`;
   dateMessage.classList.toggle("warning-text", Boolean(hours.closed));
+}
+
+function renderAvailability(availability) {
+  const unavailable = new Set(availability.unavailable_slots || []);
+  const slots = availability.slots || defaultSlotsForDate(dateInput.value).map((time) => ({ time, available: !unavailable.has(time) }));
+  renderSlots(slots);
 }
 
 function renderSlots(slots) {
@@ -256,6 +268,12 @@ async function submitBooking(event) {
     goToStep(0);
     success.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
+    if (error.status === 409) {
+      warning.textContent = "Este horário acabou de ser reservado. Por favor, escolha outro horário.";
+      warning.classList.remove("hidden");
+      await loadAvailability();
+      return;
+    }
     const online = await checkBackendHealth();
     if (!online) {
       savePendingBooking(payload);
@@ -373,7 +391,9 @@ async function apiRequest(path, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
   if (!response.ok) {
     const detail = await response.json().catch(() => ({}));
-    throw new Error(detail.error || `Erro HTTP ${response.status}`);
+    const error = new Error(detail.error || `Erro HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
   }
   return response.json();
 }

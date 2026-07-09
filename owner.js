@@ -86,19 +86,34 @@ function renderBookings() {
     const additional = booking.additional_services || "Sem adicionais";
     const transport = booking.transport_needed ? booking.transport_label || "Sim" : booking.transport_label || "Não";
     const address = [booking.address, booking.neighborhood, booking.address_complement, booking.reference_point].filter(Boolean).join(" · ");
+    const meta = [
+      ["ID", booking.booking_id || booking.id],
+      ["Criado em", formatDateTime(booking.created_at)],
+      ["Email", booking.tutor_email || booking.email],
+      ["Pelagem", booking.coat_type],
+      ["Temperamento", booking.temperament],
+      ["Valor estimado", booking.service_price ? formatMoney(booking.service_price) : ""],
+      ["Busca", booking.preferred_pickup_time]
+    ].filter(([, value]) => value);
     return `
       <tr>
-        <td><strong>${escapeHtml(booking.scheduled_time || booking.appointment_hour || "")}</strong><span>${escapeHtml(formatDate(booking.scheduled_date || booking.appointment_date))}</span></td>
+        <td>
+          <strong>${escapeHtml(booking.scheduled_time || booking.appointment_hour || "")}</strong>
+          <span>${escapeHtml(formatDate(booking.scheduled_date || booking.appointment_date))}</span>
+          <small>${escapeHtml(booking.booking_id || booking.id || "")}</small>
+        </td>
         <td>
           <strong>${escapeHtml(booking.pet_name || "Pet não informado")}</strong>
-          <span>${escapeHtml(booking.pet_type || "Tipo não informado")} · ${escapeHtml(booking.pet_size || "Porte não informado")}</span>
+          <span>${escapeHtml(booking.pet_type || "Pet não informado")} · ${escapeHtml(booking.pet_size || "Porte não informado")}</span>
           <span>${escapeHtml(booking.tutor_name || "Tutor não informado")} · WhatsApp: ${escapeHtml(booking.tutor_phone || booking.whatsapp || "Não informado")}</span>
+          ${meta.map(([label, value]) => `<small>${escapeHtml(label)}: ${escapeHtml(value)}</small>`).join("")}
         </td>
         <td>
           <strong>${escapeHtml(service)}</strong>
           <span>Adicionais: ${escapeHtml(additional)}</span>
           <span>Leva e traz: ${escapeHtml(transport)}</span>
-          ${address ? `<small>${escapeHtml(address)}</small>` : ""}
+          ${address ? `<small>Endereço: ${escapeHtml(address)}</small>` : ""}
+          ${booking.address_complement ? `<small>Complemento: ${escapeHtml(booking.address_complement)}</small>` : ""}
           ${booking.notes ? `<small>Obs.: ${escapeHtml(booking.notes)}</small>` : ""}
         </td>
         <td><span class="status-pill status-${slug(currentStatus)}">${escapeHtml(currentStatus)}</span></td>
@@ -172,6 +187,19 @@ function formatDate(value) {
   if (!value) return "Não informada";
   const [year, month, day] = value.split("-");
   return `${day}/${month}/${year}`;
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("pt-BR");
+}
+
+function formatMoney(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return value;
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(number);
 }
 
 function slug(value) {
