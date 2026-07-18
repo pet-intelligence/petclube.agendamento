@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pet Clube | Agendamento</title>
+    <title>PetClub SP | Agendamento</title>
     <link rel="stylesheet" href="styles.css" />
     <script>
       window.PETCLUB_API_URL = window.location.hostname.endsWith("github.io")
@@ -14,10 +14,10 @@
   </head>
   <body class="client-shell">
     <header class="client-topbar">
-      <a class="client-brand" href="index.html" aria-label="Pet Clube">
+      <a class="client-brand" href="index.html" aria-label="PetClub SP">
         <span>PC</span>
         <div>
-          <strong>Pet Clube</strong>
+          <strong>PetClub SP</strong>
           <small>O clube preferido do seu pet.</small>
         </div>
       </a>
@@ -26,8 +26,8 @@
     <main class="client-main">
       <section class="client-hero compact-hero">
         <div>
-          <p class="eyebrow">Pet Clube</p>
-          <h1>Pet Clube</h1>
+          <p class="eyebrow">PetClub SP</p>
+          <h1>PetClub SP</h1>
           <p class="hero-slogan">O clube preferido do seu pet.</p>
           <p>Agende banho, tosa e serviços pet com facilidade.</p>
         </div>
@@ -36,7 +36,7 @@
       <div id="api-warning" class="notice hidden"></div>
       <div id="success-message" class="success hidden">
         <strong>Agendamento recebido!</strong>
-        <span>Em breve a equipe do Pet Clube irá confirmar.</span>
+        <span>Em breve a equipe do PetClub SP irá confirmar.</span>
       </div>
 
       <section class="step-layout">
@@ -62,7 +62,7 @@
               <label>E-mail opcional
                 <input name="email" type="email" autocomplete="email" placeholder="ana@email.com" />
               </label>
-              <label>Já é cliente do Pet Clube?
+              <label>Já é cliente do PetClub SP?
                 <select name="returning_customer" id="returning-customer" required>
                   <option value="Não">Não</option>
                   <option value="Sim">Sim</option>
@@ -77,7 +77,7 @@
 
           <div class="form-step" data-step-panel="1">
             <h2>Dados do pet</h2>
-            <div class="field-grid two">
+            <div id="first-pet-fields" class="field-grid two">
               <label>Nome do pet
                 <input name="pet_name" required placeholder="Ex.: Jack" />
               </label>
@@ -100,6 +100,8 @@
                 <textarea name="notes" placeholder="Alergia, medo, preferência de shampoo, comportamento ou cuidado especial"></textarea>
               </label>
             </div>
+            <div id="additional-pets"></div>
+            <button type="button" id="add-pet" class="button secondary add-pet-button">Adicionar outro pet</button>
           </div>
 
           <div class="form-step" data-step-panel="2">
@@ -146,7 +148,7 @@
 
           <div class="form-step" data-step-panel="4">
             <h2>Data e horário</h2>
-            <div class="field-grid two">
+            <div id="timed-date-fields" class="field-grid two">
               <label>Data desejada
                 <input name="appointment_date" id="appointment-date" type="date" required />
               </label>
@@ -156,11 +158,18 @@
                 </select>
               </label>
             </div>
+            <div id="range-date-fields" class="field-grid two hidden">
+              <label>Data de entrada
+                <input name="entry_date" id="entry-date" type="date" />
+              </label>
+              <label>Data de saída
+                <input name="exit_date" id="exit-date" type="date" />
+              </label>
+            </div>
             <p id="date-message" class="field-note"></p>
             <div class="business-hours-box">
               <strong>Horário de funcionamento</strong>
-              <span>Segunda a sexta: 09:00 - 17:30</span>
-              <span>Sábado: 09:00 - 16:30</span>
+              <span>Segunda a sábado: último início às 16:30</span>
               <span>Domingo: Fechado</span>
             </div>
           </div>

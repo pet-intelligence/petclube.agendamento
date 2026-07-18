@@ -24,7 +24,7 @@ function init() {
   filterDate.addEventListener("change", loadBookings);
   filterStatus.addEventListener("change", renderBookings);
   exportButton.addEventListener("click", exportCsv);
-  bookingsBody.addEventListener("click", handleStatusClick);
+  bookingsBody.addEventListener("click", handleOwnerAction);
   if (adminToken()) showOwnerApp();
 }
 
@@ -85,7 +85,26 @@ function renderBookings() {
     const service = booking.service_main || booking.service_type || booking.service_name || "Serviço não informado";
     const additional = booking.additional_services || "Sem adicionais";
     const transport = booking.transport_needed ? booking.transport_label || "Sim" : booking.transport_label || "Não";
+    const transportAction = booking.transport_needed ? `
+      <div class="transport-action">
+        <label>Previsão (min)
+          <input type="number" min="1" max="1440" inputmode="numeric" data-transport-eta="${escapeHtml(booking.booking_id || booking.id)}" value="${escapeHtml(booking.transport_eta_minutes || "")}" placeholder="Opcional" />
+        </label>
+        <button type="button" class="status-button" data-transport-id="${escapeHtml(booking.booking_id || booking.id)}">Motorista a caminho</button>
+        ${booking.transport_notified_at ? `<small>Último aviso: ${escapeHtml(formatDateTime(booking.transport_notified_at))}</small>` : ""}
+      </div>` : "";
     const address = [booking.address, booking.neighborhood, booking.address_complement, booking.reference_point].filter(Boolean).join(" · ");
+    const pets = Array.isArray(booking.pets) && booking.pets.length ? booking.pets : [{
+      pet_name: booking.pet_name,
+      pet_type: booking.pet_type,
+      pet_size: booking.pet_size,
+      service_type: service
+    }];
+    const isStay = booking.service_group === "creche" || booking.service_group === "hotel";
+    const schedule = isStay
+      ? `<strong>Entrada: ${escapeHtml(formatDate(booking.entry_date))}</strong><span>Saída: ${escapeHtml(formatDate(booking.exit_date))}</span>`
+      : `<strong>${escapeHtml(booking.scheduled_time || booking.appointment_hour || "")}</strong><span>${escapeHtml(formatDate(booking.scheduled_date || booking.appointment_date))}</span>`;
+    const availableStatuses = isStay ? ["Confirmado", "Finalizado"] : STATUSES;
     const meta = [
       ["ID", booking.booking_id || booking.id],
       ["Criado em", formatDateTime(booking.created_at)],
@@ -98,31 +117,51 @@ function renderBookings() {
     return `
       <tr>
         <td>
-          <strong>${escapeHtml(booking.scheduled_time || booking.appointment_hour || "")}</strong>
-          <span>${escapeHtml(formatDate(booking.scheduled_date || booking.appointment_date))}</span>
+          ${schedule}
           <small>${escapeHtml(booking.booking_id || booking.id || "")}</small>
         </td>
         <td>
-          <strong>${escapeHtml(booking.pet_name || "Pet não informado")}</strong>
-          <span>${escapeHtml(booking.pet_type || "Pet não informado")} · ${escapeHtml(booking.pet_size || "Porte não informado")}</span>
+          ${pets.map((pet) => `<div class="owner-pet"><strong>${escapeHtml(pet.pet_name || "Pet não informado")}</strong><span>${escapeHtml(pet.pet_type || "Pet")} · ${escapeHtml(pet.pet_size || "Porte não informado")} · ${escapeHtml(pet.service_type || service)}</span></div>`).join("")}
           <span>${escapeHtml(booking.tutor_name || "Tutor não informado")} · WhatsApp: ${escapeHtml(booking.tutor_phone || booking.whatsapp || "Não informado")}</span>
           ${meta.map(([label, value]) => `<small>${escapeHtml(label)}: ${escapeHtml(value)}</small>`).join("")}
         </td>
         <td>
           <strong>${escapeHtml(service)}</strong>
+          ${isStay ? `<span>Total: ${escapeHtml(booking.pet_count || pets.length)} pet(s)</span>` : `<span>Duração total: ${escapeHtml(booking.calculated_duration_minutes || "Não informada")} min</span>`}
           <span>Adicionais: ${escapeHtml(additional)}</span>
           <span>Leva e traz: ${escapeHtml(transport)}</span>
+          ${transportAction}
           ${address ? `<small>Endereço: ${escapeHtml(address)}</small>` : ""}
           ${booking.address_complement ? `<small>Complemento: ${escapeHtml(booking.address_complement)}</small>` : ""}
           ${booking.notes ? `<small>Obs.: ${escapeHtml(booking.notes)}</small>` : ""}
         </td>
         <td><span class="status-pill status-${slug(currentStatus)}">${escapeHtml(currentStatus)}</span></td>
-        <td><div class="status-actions">${STATUSES.map((nextStatus) => `<button type="button" class="status-button" data-id="${escapeHtml(booking.booking_id || booking.id)}" data-status="${escapeHtml(nextStatus)}" ${nextStatus === currentStatus ? "disabled" : ""}>${escapeHtml(nextStatus)}</button>`).join("")}</div></td>
+        <td><div class="status-actions">${availableStatuses.map((nextStatus) => `<button type="button" class="status-button" data-id="${escapeHtml(booking.booking_id || booking.id)}" data-status="${escapeHtml(nextStatus)}" ${nextStatus === currentStatus ? "disabled" : ""}>${escapeHtml(nextStatus)}</button>`).join("")}</div></td>
       </tr>`;
   }).join("");
 }
 
-async function handleStatusClick(event) {
+async function handleOwnerAction(event) {
+  const transportButton = event.target.closest("button[data-transport-id]");
+  if (transportButton) {
+    const bookingId = transportButton.dataset.transportId;
+    const etaInput = bookingsBody.querySelector(`[data-transport-eta="${CSS.escape(bookingId)}"]`);
+    const eta = etaInput?.value.trim() || null;
+    transportButton.disabled = true;
+    try {
+      await apiRequest(`/api/bookings/${encodeURIComponent(bookingId)}/transport-status`, {
+        method: "POST",
+        body: JSON.stringify({ transport_status: "motorista_a_caminho", transport_eta_minutes: eta })
+      });
+      warning.classList.add("hidden");
+      await loadBookings();
+    } catch (error) {
+      warning.textContent = error.status === 401 ? "Acesso não autorizado" : error.message || "Não foi possível enviar o aviso de transporte.";
+      warning.classList.remove("hidden");
+      transportButton.disabled = false;
+    }
+    return;
+  }
   const button = event.target.closest("button[data-id][data-status]");
   if (!button) return;
   button.disabled = true;

@@ -19,11 +19,11 @@ const ADDITIONAL_SERVICES = [
 ];
 
 const BUSINESS_HOURS = {
-  1: { label: "Segunda", open: "09:00", close: "17:30" },
-  2: { label: "Terça", open: "09:00", close: "17:30" },
-  3: { label: "Quarta", open: "09:00", close: "17:30" },
-  4: { label: "Quinta", open: "09:00", close: "17:30" },
-  5: { label: "Sexta", open: "09:00", close: "17:30" },
+  1: { label: "Segunda", open: "09:00", close: "16:30" },
+  2: { label: "Terça", open: "09:00", close: "16:30" },
+  3: { label: "Quarta", open: "09:00", close: "16:30" },
+  4: { label: "Quinta", open: "09:00", close: "16:30" },
+  5: { label: "Sexta", open: "09:00", close: "16:30" },
   6: { label: "Sábado", open: "09:00", close: "16:30" },
   0: { label: "Domingo", closed: true }
 };
@@ -53,6 +53,12 @@ const backButton = document.querySelector("#back-button");
 const nextButton = document.querySelector("#next-button");
 const confirmButton = document.querySelector("#confirm-button");
 const summary = document.querySelector("#booking-summary");
+const additionalPets = document.querySelector("#additional-pets");
+const addPetButton = document.querySelector("#add-pet");
+const timedDateFields = document.querySelector("#timed-date-fields");
+const rangeDateFields = document.querySelector("#range-date-fields");
+const entryDateInput = document.querySelector("#entry-date");
+const exitDateInput = document.querySelector("#exit-date");
 
 init();
 
@@ -61,6 +67,10 @@ function init() {
   renderAdditionalServices();
   dateInput.min = new Date().toISOString().slice(0, 10);
   dateInput.value = dateInput.min;
+  entryDateInput.min = dateInput.min;
+  exitDateInput.min = dateInput.min;
+  entryDateInput.value = dateInput.min;
+  exitDateInput.value = dateInput.min;
   stepTabs.forEach((tab) => tab.addEventListener("click", () => goToStep(Number(tab.dataset.step))));
   nextButton.addEventListener("click", nextStep);
   backButton.addEventListener("click", () => goToStep(Math.max(currentStep - 1, 0)));
@@ -69,6 +79,12 @@ function init() {
   loadKnownClientButton.addEventListener("click", loadKnownClient);
   transportOption.addEventListener("change", updateTransportFields);
   dateInput.addEventListener("change", loadAvailability);
+  addPetButton.addEventListener("click", addPet);
+  additionalPets.addEventListener("click", (event) => {
+    const button = event.target.closest(".remove-pet");
+    if (button) { button.closest(".additional-pet").remove(); updateBookingMode(); }
+  });
+  additionalPets.addEventListener("change", updateBookingMode);
   updateKnownClientVisibility();
   updateTransportFields();
   updateDogTaxiNote();
@@ -90,6 +106,7 @@ function renderPrimaryServices() {
       selectedPrimaryService = PRIMARY_SERVICES.find((service) => service.id === button.dataset.serviceId) || PRIMARY_SERVICES[0];
       primaryOptions.querySelectorAll(".service-card").forEach((card) => card.classList.remove("active"));
       button.classList.add("active");
+      updateBookingMode();
       if (currentStep === 5) renderSummary();
     });
   });
@@ -117,6 +134,14 @@ function nextStep() {
 }
 
 function validateCurrentStep() {
+  if (currentStep >= 2) {
+    const details = bookingMode();
+    if (details.error) {
+      warning.textContent = details.error;
+      warning.classList.remove("hidden");
+      return false;
+    }
+  }
   const fields = [...stepPanels[currentStep].querySelectorAll("input, select, textarea")];
   return fields.every((field) => field.reportValidity());
 }
@@ -181,10 +206,11 @@ function updateDogTaxiNote() {
 }
 
 async function loadAvailability() {
+  if (bookingMode().group !== "timed") return;
   updateDateMessage();
   hourSelect.innerHTML = '<option value="">Carregando horários...</option>';
   try {
-    const availability = await apiRequest(`/api/availability?date=${encodeURIComponent(dateInput.value)}`);
+    const availability = await apiRequest(`/api/availability?date=${encodeURIComponent(dateInput.value)}&duration_minutes=${totalDuration()}`);
     warning.classList.add("hidden");
     renderAvailability(availability);
   } catch (error) {
@@ -211,7 +237,7 @@ function updateDateMessage() {
   }
   dateMessage.textContent = hours.closed
     ? "Domingo estamos fechados. Escolha outro dia para agilizar a confirmação."
-    : `${hours.label}: atendimento das ${hours.open} às ${hours.close}.`;
+    : `${hours.label}: início de agendamentos das ${hours.open} às ${hours.close}.`;
   dateMessage.classList.toggle("warning-text", Boolean(hours.closed));
 }
 
@@ -239,12 +265,14 @@ function renderSummary() {
   const additionalText = additional.length
     ? additional.map((service) => `${service.name} (${formatPrice(service.price)})`).join(", ")
     : "Nenhum adicional";
+  const dateText = payload.service_group === "timed"
+    ? `${formatDate(payload.appointment_date)} às ${payload.appointment_hour || "Não informado"} · ${payload.calculated_duration_minutes} min`
+    : `${formatDate(payload.entry_date)} a ${formatDate(payload.exit_date)} · ${payload.pet_count} pet(s)`;
   const items = [
     ["Tutor", `${payload.tutor_name} | ${payload.whatsapp}`],
-    ["Pet", `${payload.pet_name} | ${payload.pet_type} | ${payload.pet_size}`],
-    ["Serviço principal", `${selectedPrimaryService.name} (${formatPrice(selectedPrimaryService.price)})`],
+    ["Pets", payload.pets.map((pet) => `${pet.pet_name} | ${pet.pet_size} | ${pet.service_type}`).join(" · ")],
     ["Serviços adicionais", additionalText],
-    ["Data e horário", `${formatDate(payload.appointment_date)} às ${payload.appointment_hour || "Não informado"}`],
+    [payload.service_group === "timed" ? "Data, horário e duração" : "Entrada, saída e quantidade", dateText],
     ["Leva e traz", payload.transport_label],
     ["Observações", payload.notes || "Sem observações"]
   ];
@@ -269,9 +297,9 @@ async function submitBooking(event) {
     success.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
     if (error.status === 409) {
-      warning.textContent = "Este horário acabou de ser reservado. Por favor, escolha outro horário.";
+      warning.textContent = error.message || "Não foi possível concluir o agendamento.";
       warning.classList.remove("hidden");
-      await loadAvailability();
+      if (payload.service_group === "timed") await loadAvailability();
       return;
     }
     const online = await checkBackendHealth();
@@ -300,6 +328,8 @@ function buildPayload() {
   const notesParts = [data.notes || ""];
   if (additionalNames.length) notesParts.push(`Serviços adicionais: ${additionalNames.join(", ")}.`);
   if (transportNeeded) notesParts.push(`Leva e traz: ${data.transport_option}.`);
+  const pets = currentPets(data);
+  const mode = bookingMode(pets);
   return {
     tutor_name: data.tutor_name,
     whatsapp: data.whatsapp,
@@ -307,18 +337,24 @@ function buildPayload() {
     pet_name: data.pet_name,
     pet_type: data.pet_type,
     pet_size: data.pet_size,
+    pets,
+    pet_count: pets.length,
     coat_type: "Não informado",
     temperament: "Não informado",
     service_type: selectedPrimaryService.name,
     service_id: selectedPrimaryService.id,
     service_name: selectedPrimaryService.name,
     service_price: selectedPrimaryService.price,
+    service_group: mode.group,
+    calculated_duration_minutes: mode.group === "timed" ? totalDuration(pets) : null,
     additional_services: additionalNames.join(", "),
     additional_service_ids: additional.map((service) => service.id).join(","),
     transport_needed: transportNeeded,
     transport_label: data.transport_option,
-    appointment_date: data.appointment_date,
-    appointment_hour: data.appointment_hour,
+    appointment_date: mode.group === "timed" ? data.appointment_date : "",
+    appointment_hour: mode.group === "timed" ? data.appointment_hour : "",
+    entry_date: mode.group === "timed" ? "" : data.entry_date,
+    exit_date: mode.group === "timed" ? "" : data.exit_date,
     status: "Novo",
     notes: notesParts.filter(Boolean).join(" ").trim(),
     address: transportNeeded ? data.address || "" : "",
@@ -337,12 +373,16 @@ function selectedAdditionalServices() {
 
 function resetForm() {
   form.reset();
+  additionalPets.innerHTML = "";
   selectedPrimaryService = PRIMARY_SERVICES[0];
   primaryOptions.querySelectorAll(".service-card").forEach((card, index) => card.classList.toggle("active", index === 0));
   dateInput.value = dateInput.min;
+  entryDateInput.value = entryDateInput.min;
+  exitDateInput.value = exitDateInput.min;
   updateKnownClientVisibility();
   updateTransportFields();
   updateDogTaxiNote();
+  updateBookingMode();
   loadAvailability();
 }
 
@@ -407,8 +447,88 @@ function savePendingBooking(payload) {
 function defaultSlotsForDate(dateText) {
   const hours = BUSINESS_HOURS[dayOfWeek(dateText)];
   if (hours?.closed) return [];
-  const endHour = hours && hours.close === "16:30" ? 16 : 17;
-  return Array.from({ length: endHour - 8 }, (_, index) => `${String(index + 9).padStart(2, "0")}:00`);
+  return Array.from({ length: 16 }, (_, index) => {
+    const total = 9 * 60 + index * 30;
+    return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+  });
+}
+
+function addPet() {
+  const index = additionalPets.children.length + 2;
+  additionalPets.insertAdjacentHTML("beforeend", `
+    <fieldset class="additional-pet">
+      <legend>Pet ${index}</legend>
+      <div class="field-grid two">
+        <label>Nome do pet<input name="extra_pet_name" required placeholder="Ex.: Luna" /></label>
+        <label>Porte<select name="extra_pet_size" required><option>Pequeno</option><option>Médio</option><option>Grande</option><option>Gigante</option></select></label>
+        <label>Serviço<select name="extra_pet_service" required>${PRIMARY_SERVICES.map((service) => `<option>${escapeHtml(service.name)}</option>`).join("")}</select></label>
+        <label>Observações opcionais<input name="extra_pet_notes" /></label>
+      </div>
+      <button type="button" class="button secondary remove-pet">Remover pet</button>
+    </fieldset>`);
+  updateBookingMode();
+}
+
+function currentPets(data = Object.fromEntries(new FormData(form).entries())) {
+  const pets = [{
+    pet_name: data.pet_name,
+    pet_type: data.pet_type,
+    pet_size: data.pet_size,
+    service_type: selectedPrimaryService.name,
+    notes: data.notes || "",
+    temperament: "Não informado"
+  }];
+  additionalPets.querySelectorAll(".additional-pet").forEach((container) => {
+    pets.push({
+      pet_name: container.querySelector('[name="extra_pet_name"]').value,
+      pet_type: "Cachorro",
+      pet_size: container.querySelector('[name="extra_pet_size"]').value,
+      service_type: container.querySelector('[name="extra_pet_service"]').value,
+      notes: container.querySelector('[name="extra_pet_notes"]').value,
+      temperament: "Não informado"
+    });
+  });
+  return pets;
+}
+
+function serviceGroup(service) {
+  if (service === "Creche") return "creche";
+  if (service === "Hotel") return "hotel";
+  return "timed";
+}
+
+function bookingMode(pets = currentPets()) {
+  const groups = pets.map((pet) => serviceGroup(pet.service_type));
+  if (new Set(groups).size > 1) return { error: "Não é permitido misturar serviços com horário, Creche e Hotel no mesmo agendamento." };
+  return { group: groups[0] };
+}
+
+function durationForPet(pet) {
+  if (pet.service_type === "Consulta") return 30;
+  const size = pet.pet_size;
+  const table = pet.service_type === "Banho"
+    ? { Pequeno: 30, Médio: 45, Grande: 45, Gigante: 60 }
+    : { Pequeno: 45, Médio: 60, Grande: 60, Gigante: 90 };
+  return table[size] || 0;
+}
+
+function totalDuration(pets = currentPets()) {
+  return pets.reduce((total, pet) => total + durationForPet(pet), 0);
+}
+
+function updateBookingMode() {
+  const mode = bookingMode();
+  const isTimed = !mode.error && mode.group === "timed";
+  timedDateFields.classList.toggle("hidden", !isTimed);
+  rangeDateFields.classList.toggle("hidden", isTimed || Boolean(mode.error));
+  dateInput.required = isTimed;
+  hourSelect.required = isTimed;
+  entryDateInput.required = !isTimed && !mode.error;
+  exitDateInput.required = !isTimed && !mode.error;
+  document.querySelector(".business-hours-box").classList.toggle("hidden", !isTimed);
+  dateMessage.textContent = mode.error || (!isTimed ? "A capacidade é verificada por pet em cada dia do intervalo." : dateMessage.textContent);
+  dateMessage.classList.toggle("warning-text", Boolean(mode.error));
+  if (isTimed) loadAvailability();
 }
 
 function dayOfWeek(dateText) {
