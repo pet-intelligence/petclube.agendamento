@@ -1,6 +1,12 @@
 const API_BASE_URL = (window.PETCLUB_API_URL || "https://api.petintelligence.com.br").replace(/\/$/, "");
 const ADMIN_TOKEN_KEY = "pet_clube_admin_token";
 const STATUSES = ["Novo", "Confirmado", "Em atendimento", "Pronto", "Finalizado", "Cancelado"];
+const STATUS_ACTION_LABELS = {
+  Confirmado: "Confirmar",
+  "Em atendimento": "Iniciar atendimento",
+  Pronto: "Marcar como pronto",
+  Finalizado: "Finalizar"
+};
 
 let bookings = [];
 
@@ -20,6 +26,8 @@ init();
 function init() {
   filterDate.value = new Date().toISOString().slice(0, 10);
   filterStatus.innerHTML = ['<option value="">Todos</option>', ...STATUSES.map((status) => `<option>${escapeHtml(status)}</option>`)].join("");
+  const actionsHeader = bookingsBody.closest("table")?.querySelector("thead th:last-child");
+  if (actionsHeader) actionsHeader.textContent = "Próxima ação";
   loginForm.addEventListener("submit", handleLogin);
   filterDate.addEventListener("change", loadBookings);
   filterStatus.addEventListener("change", renderBookings);
@@ -105,7 +113,7 @@ function renderBookings() {
     const schedule = isStay
       ? `<strong>Entrada: ${escapeHtml(formatDate(booking.entry_date))}</strong><span>Saída: ${escapeHtml(formatDate(booking.exit_date))}</span>`
       : `<strong>${escapeHtml(booking.scheduled_time || booking.appointment_hour || "")}</strong><span>${escapeHtml(formatDate(booking.scheduled_date || booking.appointment_date))}</span>`;
-    const availableStatuses = isStay ? ["Confirmado", "Finalizado"] : STATUSES;
+    const statusActions = renderStatusActions(booking.booking_id || booking.id, currentStatus, isStay);
     const meta = [
       ["ID", booking.booking_id || booking.id],
       ["Criado em", formatDateTime(booking.created_at)],
@@ -137,7 +145,7 @@ function renderBookings() {
           ${booking.notes ? `<small>Obs.: ${escapeHtml(booking.notes)}</small>` : ""}
         </td>
         <td><span class="status-pill status-${slug(currentStatus)}">${escapeHtml(currentStatus)}</span></td>
-        <td><div class="status-actions">${availableStatuses.map((nextStatus) => `<button type="button" class="status-button" data-id="${escapeHtml(booking.booking_id || booking.id)}" data-status="${escapeHtml(nextStatus)}" ${nextStatus === currentStatus ? "disabled" : ""}>${escapeHtml(nextStatus)}</button>`).join("")}</div></td>
+        <td><div class="status-actions">${statusActions}</div></td>
       </tr>`;
   }).join("");
 }
@@ -169,12 +177,32 @@ async function handleOwnerAction(event) {
   button.disabled = true;
   try {
     await apiRequest(`/api/bookings/${encodeURIComponent(button.dataset.id)}`, { method: "PATCH", body: JSON.stringify({ status: button.dataset.status }) });
+    warning.classList.add("hidden");
     await loadBookings();
   } catch (error) {
     warning.textContent = error.status === 401 ? "Acesso não autorizado" : error.message || "Não foi possível atualizar o status.";
     warning.classList.remove("hidden");
     button.disabled = false;
   }
+}
+
+function renderStatusActions(bookingId, currentStatus, isStay) {
+  const flow = isStay
+    ? ["Novo", "Confirmado", "Finalizado"]
+    : ["Novo", "Confirmado", "Em atendimento", "Pronto", "Finalizado"];
+  const terminal = currentStatus === "Finalizado" || currentStatus === "Cancelado";
+  const currentIndex = flow.indexOf(currentStatus);
+  const progressionButtons = flow.slice(1).map((status, index) => {
+    const stepIndex = index + 1;
+    const completed = currentStatus !== "Cancelado" && currentIndex >= stepIndex;
+    const enabled = !terminal && currentIndex >= 0 && stepIndex === currentIndex + 1;
+    const stateClass = completed ? "is-completed" : enabled ? "is-next" : "is-future";
+    const actionClass = `action-${slug(status)}`;
+    return `<button type="button" class="status-button ${actionClass} ${stateClass}" data-id="${escapeHtml(bookingId)}" data-status="${escapeHtml(status)}" ${enabled ? "" : "disabled"}>${escapeHtml(STATUS_ACTION_LABELS[status])}</button>`;
+  });
+  const cancelEnabled = !terminal && currentIndex >= 0;
+  progressionButtons.push(`<button type="button" class="status-button action-cancelado ${cancelEnabled ? "is-next" : "is-future"}" data-id="${escapeHtml(bookingId)}" data-status="Cancelado" ${cancelEnabled ? "" : "disabled"}>Cancelar</button>`);
+  return progressionButtons.join("");
 }
 
 async function exportCsv() {

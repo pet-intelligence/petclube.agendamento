@@ -301,10 +301,35 @@ td span, td small { display: block; margin-top: 4px; color: var(--muted); line-h
   color: var(--green-dark);
   font-weight: 850;
 }
-.status-cancelado { color: var(--danger); background: #fdeceb; }
-.status-finalizado { color: #425466; background: #eef2f5; }
+.status-novo { color: #5f6b66; background: #eef2f0; }
+.status-confirmado { color: #087333; background: #e2f6e9; }
+.status-em-atendimento { color: #1858a8; background: #e7f0fc; }
+.status-pronto { color: #9a5600; background: #fff0d8; }
+.status-finalizado { color: #ffffff; background: #17324d; }
+.status-cancelado { color: #ffffff; background: var(--danger); }
 .status-actions { display: flex; flex-wrap: wrap; gap: 7px; max-width: 440px; }
-.status-button { min-height: 34px; padding: 7px 9px; font-size: .82rem; background: #ffffff; color: var(--green-dark); border-color: var(--line); }
+.status-button {
+  min-height: 34px;
+  padding: 7px 9px;
+  font-size: .82rem;
+  background: #ffffff;
+  color: var(--green-dark);
+  border-color: var(--line);
+}
+.status-button.action-confirmado.is-next { color: #ffffff; background: var(--green); border-color: var(--green); }
+.status-button.action-em-atendimento.is-next { color: #ffffff; background: #2563b8; border-color: #2563b8; }
+.status-button.action-pronto.is-next { color: #ffffff; background: #d97706; border-color: #d97706; }
+.status-button.action-finalizado.is-next { color: #ffffff; background: #17324d; border-color: #17324d; }
+.status-button.action-cancelado.is-next { color: #ffffff; background: var(--danger); border-color: var(--danger); }
+.status-button.is-completed,
+.status-button.is-future,
+.status-button:disabled {
+  cursor: not-allowed;
+  color: #7a8680;
+  background: #edf1ef;
+  border-color: #d9e0dc;
+  opacity: 1;
+}
 
 @media (max-width: 860px) {
   .client-topbar, .owner-topbar, .owner-heading { align-items: stretch; flex-direction: column; }
