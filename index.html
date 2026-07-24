@@ -34,7 +34,7 @@
       <div id="api-warning" class="notice hidden"></div>
       <div id="success-message" class="success hidden">
         <strong>Agendamento recebido!</strong>
-        <span>Em breve a equipe do PetClub SP irá confirmar.</span>
+        <span>Em breve a equipe do PetClub SP irá confirmar o agendamento e os valores estimados.</span>
       </div>
 
       <section class="step-layout">
@@ -84,6 +84,8 @@
                   <option>Gigante</option>
                 </select>
               </label>
+              <label>Raça<select name="pet_breed" id="pet-breed" required><option>Shih Tzu</option><option>Lhasa Apso</option><option>Poodle</option><option>Yorkshire</option><option>Buldogue Francês</option><option>Buldogue Inglês</option><option>Labrador</option><option>Golden Retriever</option><option>Spitz</option><option>Maltês</option><option>Outro</option></select></label>
+              <label id="other-breed-field" class="hidden">Outra raça<input name="pet_breed_other" id="pet-breed-other" placeholder="Digite a raça" /></label>
               <label>Tipo de pelagem
                 <select name="coat_type" required><option value="Curta">Curta</option><option value="Longa">Longa</option></select>
               </label>
@@ -102,6 +104,7 @@
             <div id="primary-service-options" class="service-grid"></div>
             <h3>Serviços adicionais</h3>
             <div id="additional-service-options" class="addon-grid"></div>
+            <fieldset id="grooming-option-fields" class="hidden"><legend>Como será a tosa?</legend><label><input type="radio" name="grooming_option" value="Tosa na Máquina" /> Tosa na Máquina — A partir de R$90,00</label><label><input type="radio" name="grooming_option" value="Tosa na Tesoura" /> Tosa na Tesoura — A partir de R$110,00</label></fieldset>
           </div>
 
           <div class="form-step" data-step-panel="3">
@@ -113,6 +116,7 @@
                 <option>Sim, entregar meu pet</option>
                 <option>Sim, buscar e entregar</option>
               </select>
+              <small>Leva e traz: A partir de R$25,00</small>
             </label>
             <div id="transport-fields" class="field-grid two hidden">
               <label>Endereço completo
@@ -164,6 +168,7 @@
           <div class="form-step" data-step-panel="5">
             <h2>Resumo</h2>
             <div id="booking-summary" class="summary-list"></div>
+            <div class="notice"><strong>Preço estimado.</strong> O valor final poderá variar de acordo com a avaliação do profissional e será confirmado pela equipe da PetClub SP antes da execução do serviço.</div>
           </div>
 
           <div class="form-actions">

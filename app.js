@@ -1,19 +1,18 @@
 const API_BASE_URL = (window.PETCLUB_API_URL || "https://api.petintelligence.com.br").replace(/\/$/, "");
-const CUSTOMER_PROFILE_KEY = "pet_clube_customer_profiles";
-const CUSTOMER_HISTORY_KEY = "pet_clube_customer_history";
 
 // Altere os servicos e precos aqui quando a tabela comercial mudar.
 const PRIMARY_SERVICES = [
-  { id: "banho", name: "Banho", price: 50 },
-  { id: "banho-tosa", name: "Banho + Tosa", price: 50 },
-  { id: "consulta", name: "Consulta", price: 50 },
-  { id: "creche", name: "Creche", price: 50 },
-  { id: "hotel", name: "Hotel", price: 50 }
+  { id: "banho", name: "Banho", price: 70 },
+  { id: "banho-tosa", name: "Banho e Tosa", price: null },
+  { id: "consulta", name: "Consulta Veterinária", price: 280 },
+  { id: "creche", name: "Creche", price: null, consultation: true },
+  { id: "hotel", name: "Hotel", price: null, consultation: true }
 ];
 
 const ADDITIONAL_SERVICES = [
-  { id: "tosa-higienica", name: "Tosa Higiênica", price: 15 },
-  { id: "hidratacao", name: "Hidratação", price: 15 }
+  { id: "tosa-higienica", name: "Tosa Higiênica", price: 40 },
+  { id: "hidratacao", name: "Hidratação", price: 40 },
+  { id: "escovacao-dentes", name: "Escovação de Dentes", price: 12 }
 ];
 
 
@@ -42,10 +41,16 @@ const timedDateFields = document.querySelector("#timed-date-fields");
 const rangeDateFields = document.querySelector("#range-date-fields");
 const entryDateInput = document.querySelector("#entry-date");
 const exitDateInput = document.querySelector("#exit-date");
+const petBreed = document.querySelector("#pet-breed");
+const petBreedOther = document.querySelector("#pet-breed-other");
+const otherBreedField = document.querySelector("#other-breed-field");
+const groomingOptionFields = document.querySelector("#grooming-option-fields");
 
 init();
 
 function init() {
+  localStorage.removeItem("pet_clube_customer_profiles");
+  localStorage.removeItem("pet_clube_customer_history");
   renderPrimaryServices();
   renderAdditionalServices();
   dateInput.min = todayInSaoPaulo();
@@ -67,6 +72,22 @@ function init() {
     if (button) { button.closest(".additional-pet").remove(); renumberAdditionalPets(); updateBookingMode(); }
   });
   additionalPets.addEventListener("change", updateBookingMode);
+  petBreed.addEventListener("change", updateBreedField);
+  form.addEventListener("change", (event) => {
+    if (event.target.name === "grooming_option" && currentStep === 5) renderSummary();
+    if (event.target.matches(".extra-service")) {
+      const method = event.target.closest(".additional-pet").querySelector(".extra-grooming-option");
+      method.required = event.target.value === "Banho e Tosa";
+      if (!method.required) method.value = "";
+      updateBookingMode();
+    }
+    if (event.target.matches(".extra-breed")) {
+      const field = event.target.closest(".field-grid").querySelector(".extra-other-breed");
+      const input = field.querySelector("input");
+      const other = event.target.value === "Outro";
+      field.classList.toggle("hidden", !other); input.required = other; if (!other) input.value = "";
+    }
+  });
   updateTransportFields();
   loadAvailability();
   goToStep(0);
@@ -76,7 +97,7 @@ function renderPrimaryServices() {
   primaryOptions.innerHTML = PRIMARY_SERVICES.map((service, index) => `
     <button type="button" class="service-card ${index === 0 ? "active" : ""}" data-service-id="${escapeHtml(service.id)}">
       <strong>${escapeHtml(service.name)}</strong>
-      <small>A partir de ${formatPrice(service.price)}</small>
+      <small>${service.consultation ? "Preço sob consulta. A equipe da PetClub SP entrará em contato para confirmar valores e condições da hospedagem/creche." : service.price == null ? "Tosa na Máquina: A partir de R$ 90,00 · Tosa na Tesoura: A partir de R$ 110,00" : `A partir de ${formatPrice(service.price)}`}</small>
     </button>
   `).join("");
 
@@ -95,7 +116,7 @@ function renderAdditionalServices() {
   additionalOptions.innerHTML = ADDITIONAL_SERVICES.map((service) => `
     <label class="addon-card">
       <input type="checkbox" name="additional_services" value="${escapeHtml(service.id)}" />
-      <span><strong>${escapeHtml(service.name)}</strong><small>A partir de ${formatPrice(service.price)}</small></span>
+      <span><strong>${escapeHtml(service.name)}</strong><small>${service.id === "escovacao-dentes" ? formatPrice(service.price) : `A partir de ${formatPrice(service.price)}`}</small></span>
     </label>
   `).join("");
 
@@ -126,7 +147,12 @@ function validateCurrentStep() {
   const fields = [...stepPanels[currentStep].querySelectorAll("input, select, textarea")];
   if (!fields.every((field) => field.reportValidity())) return false;
   const mode = bookingMode();
-  if (currentStep === 4 && mode.group !== "timed" && exitDateInput.value < entryDateInput.value) {
+  if (currentStep === 2 && !mode.compatible) {
+    warning.textContent = "Não é permitido misturar Creche ou Hotel com serviços de horário, nem misturar recursos de banho e consulta no mesmo agendamento.";
+    warning.classList.remove("hidden");
+    return false;
+  }
+  if (currentStep === 4 && mode.group === "stay" && exitDateInput.value < entryDateInput.value) {
     warning.textContent = "A data de saída não pode ser anterior à data de entrada.";
     warning.classList.remove("hidden");
     return false;
@@ -163,10 +189,10 @@ function updateTransportFields() {
 }
 
 async function loadAvailability() {
-  if (bookingMode().group !== "timed") return;
+  if (bookingMode().group === "stay") return;
   hourSelect.innerHTML = "<option value=\"\">Carregando horários...</option>";
   try {
-    const availability = await apiRequest(`/api/availability?date=${encodeURIComponent(dateInput.value)}&duration_minutes=${totalDuration()}`);
+    const availability = await apiRequest(`/api/availability?date=${encodeURIComponent(dateInput.value)}&duration_minutes=${totalDuration()}&resource=${encodeURIComponent(bookingMode().group)}`);
     warning.classList.add("hidden");
     renderAvailability(availability);
   } catch (error) {
@@ -193,20 +219,19 @@ function renderSlots(slots) {
 
 function renderSummary() {
   const payload = buildPayload();
-  const additional = selectedAdditionalServices();
-  const additionalText = additional.length
-    ? additional.map((service) => `${service.name} (${formatPrice(service.price)})`).join(", ")
-    : "Nenhum adicional";
-  const dateText = payload.service_group === "timed"
+  const additional = [...new Set(payload.pets.flatMap((pet) => pet.additional_services || []))];
+  const additionalText = additional.length ? additional.join(", ") : "Nenhum adicional";
+  const dateText = payload.service_group !== "stay"
     ? `${formatDate(payload.appointment_date)} às ${payload.appointment_hour || "Não informado"} · ${payload.calculated_duration_minutes} min`
     : `${formatDate(payload.entry_date)} a ${formatDate(payload.exit_date)} · ${payload.pet_count} pet(s)`;
   const transportDetails = [payload.address, payload.address_complement, payload.neighborhood, payload.reference_point, payload.location_link].filter(Boolean).join(" · ");
   const items = [
     ["Tutor", `${payload.tutor_name} | ${payload.whatsapp}`],
-    ["Pets", payload.pets.map((pet) => `${pet.pet_name} | ${pet.pet_size} | ${pet.service_type}`).join(" · ")],
+    ["Pets", payload.pets.map((pet) => { const extras = pet.additional_services.length ? pet.additional_services.join(", ") : "sem adicionais"; const method = pet.grooming_option ? ` · ${pet.grooming_option}` : ""; return `${pet.pet_name} | ${pet.pet_breed || "Raça não informada"} | ${pet.pet_size} | ${pet.service_type}${method} · ${extras}`; }).join(" · ")],
+    ["Preço", payload.service_price == null ? "Preço sob consulta. A equipe da PetClub SP entrará em contato para confirmar valores e condições da hospedagem/creche." : `A partir de ${formatPrice(payload.service_price)}`],
     ["Serviços adicionais", additionalText],
-    [payload.service_group === "timed" ? "Data, horário e duração" : "Entrada, saída e quantidade", dateText],
-    ["Leva e traz", payload.transport_label],
+    [payload.service_group !== "stay" ? "Data, horário e duração" : "Entrada, saída e quantidade", dateText],
+    ["Leva e traz", payload.transport_needed ? `${payload.transport_label} · A partir de R$ 25,00` : payload.transport_label],
     ["Observações", payload.notes || "Sem observações"]
   ];
   if (payload.transport_needed) items.splice(5, 0, ["Endereço do leva e traz", transportDetails]);
@@ -224,7 +249,6 @@ async function submitBooking(event) {
   try {
     await apiRequest("/api/bookings", { method: "POST", body: JSON.stringify(payload) });
     warning.classList.add("hidden");
-    saveCustomerData(payload);
     success.classList.remove("hidden");
     resetForm();
     goToStep(0);
@@ -233,7 +257,7 @@ async function submitBooking(event) {
     if (error.status === 409) {
       warning.textContent = error.message || "Não foi possível concluir o agendamento.";
       warning.classList.remove("hidden");
-      if (payload.service_group === "timed") await loadAvailability();
+      if (payload.service_group !== "stay") await loadAvailability();
       return;
     }
     warning.textContent = error.message || "Não foi possível enviar o agendamento.";
@@ -261,20 +285,23 @@ function buildPayload() {
     pet_name: data.pet_name,
     pet_type: data.pet_type,
     pet_size: data.pet_size,
+    pet_breed: petBreed.value === "Outro" ? petBreedOther.value.trim() : petBreed.value,
     coat_type: data.coat_type || "Curta",
     pets,
     pet_count: pets.length,
     temperament: "Não informado",
     service_type: selectedPrimaryService.name,
     service_group: mode.group,
-    additional_services: additionalNames,
-    calculated_duration_minutes: mode.group === "timed" ? totalDuration(pets) : null,
+    grooming_option: data.grooming_option || "",
+    service_price: estimatedPrice(pets, transportNeeded),
+    additional_services: [...new Set(pets.flatMap((pet) => pet.additional_services))],
+    calculated_duration_minutes: mode.group !== "stay" ? totalDuration(pets) : null,
     transport_needed: transportNeeded,
     transport_label: data.transport_option,
-    appointment_date: mode.group === "timed" ? data.appointment_date : "",
-    appointment_hour: mode.group === "timed" ? data.appointment_hour : "",
-    entry_date: mode.group === "timed" ? "" : data.entry_date,
-    exit_date: mode.group === "timed" ? "" : data.exit_date,
+    appointment_date: mode.group !== "stay" ? data.appointment_date : "",
+    appointment_hour: mode.group !== "stay" ? data.appointment_hour : "",
+    entry_date: mode.group !== "stay" ? "" : data.entry_date,
+    exit_date: mode.group !== "stay" ? "" : data.exit_date,
     status: "Novo",
     notes: notesParts.filter(Boolean).join(" ").trim(),
     address: transportNeeded ? data.address || "" : "",
@@ -303,34 +330,6 @@ function resetForm() {
   loadAvailability();
 }
 
-function saveCustomerData(payload) {
-  const phone = normalizePhone(payload.whatsapp);
-  if (!phone) return;
-  const profiles = readStorage(CUSTOMER_PROFILE_KEY, {});
-  profiles[phone] = {
-    tutor_name: payload.tutor_name,
-    whatsapp: payload.whatsapp,
-    email: payload.email,
-    pet_name: payload.pet_name,
-    pet_type: payload.pet_type,
-    pet_size: payload.pet_size,
-    notes: payload.notes,
-    primary_service_id: selectedPrimaryService.id
-  };
-  writeStorage(CUSTOMER_PROFILE_KEY, profiles);
-
-  const history = readStorage(CUSTOMER_HISTORY_KEY, {});
-  history[phone] = [{ ...payload, saved_at: new Date().toISOString() }, ...(history[phone] || [])].slice(0, 12);
-  writeStorage(CUSTOMER_HISTORY_KEY, history);
-}
-
-function historyTextFor(phone) {
-  const history = readStorage(CUSTOMER_HISTORY_KEY, {});
-  const recent = (history[phone] || []).filter(isRecentHistory).slice(0, 6);
-  if (!recent.length) return "Dados encontrados. Ainda não há histórico recente salvo neste navegador.";
-  return `Dados encontrados. Histórico recente: ${recent.map((item) => `${formatDate(item.appointment_date)} - ${item.service_type}`).join(" | ")}`;
-}
-
 async function apiRequest(path, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
   if (!response.ok) {
@@ -352,7 +351,12 @@ function addPet() {
         <label>Nome do pet<input name="extra_pet_name" required placeholder="Ex.: Luna" /></label>
         <label>Tipo do pet<select name="extra_pet_type" required><option>Cachorro</option><option>Gato</option><option>Outro</option></select></label>
         <label>Porte<select name="extra_pet_size" required><option>Pequeno</option><option>Médio</option><option>Grande</option><option>Gigante</option></select></label>
+        <label>Raça<select name="extra_pet_breed" class="extra-breed" required><option>Shih Tzu</option><option>Lhasa Apso</option><option>Poodle</option><option>Yorkshire</option><option>Buldogue Francês</option><option>Buldogue Inglês</option><option>Labrador</option><option>Golden Retriever</option><option>Spitz</option><option>Maltês</option><option>Outro</option></select></label>
+        <label class="extra-other-breed hidden">Outra raça<input name="extra_pet_breed_other" placeholder="Digite a raça" /></label>
         <label>Tipo de pelagem<select name="extra_pet_coat" required><option value="Curta">Curta</option><option value="Longa">Longa</option></select></label>
+        <label>Serviço principal<select name="extra_pet_service" class="extra-service" required><option>Banho</option><option>Banho e Tosa</option><option>Consulta Veterinária</option><option>Creche</option><option>Hotel</option></select></label>
+        <label>Opção de tosa<select name="extra_pet_grooming_option" class="extra-grooming-option"><option value="">Não se aplica</option><option value="Tosa na Máquina">Tosa na Máquina — A partir de R$ 90,00</option><option value="Tosa na Tesoura">Tosa na Tesoura — A partir de R$ 110,00</option></select></label>
+        <fieldset class="extra-additional-services"><legend>Serviços adicionais opcionais</legend><label><input type="checkbox" value="Tosa Higiênica" /> Tosa Higiênica — A partir de R$ 40,00</label><label><input type="checkbox" value="Hidratação" /> Hidratação — A partir de R$ 40,00</label><label><input type="checkbox" value="Escovação de Dentes" /> Escovação de Dentes — R$ 12,00</label></fieldset>
         <label>Observações opcionais<input name="extra_pet_notes" /></label>
       </div>
       <button type="button" class="button secondary remove-pet">Remover pet</button>
@@ -372,8 +376,11 @@ function currentPets(data = Object.fromEntries(new FormData(form).entries())) {
     pet_name: data.pet_name,
     pet_type: data.pet_type,
     pet_size: data.pet_size,
+    pet_breed: petBreed.value === "Outro" ? petBreedOther.value.trim() : petBreed.value,
     coat_type: data.coat_type || "Curta",
     service_type: selectedPrimaryService.name,
+    grooming_option: data.grooming_option || "",
+    additional_services: selectedAdditionalServices().map((service) => service.name),
     life_stage: "",
     neutered_status: "",
     notes: data.notes || "",
@@ -384,10 +391,13 @@ function currentPets(data = Object.fromEntries(new FormData(form).entries())) {
       pet_name: container.querySelector('[name="extra_pet_name"]').value,
       pet_type: container.querySelector('[name="extra_pet_type"]').value,
       pet_size: container.querySelector('[name="extra_pet_size"]').value,
+      pet_breed: container.querySelector('[name="extra_pet_breed"]').value === "Outro" ? container.querySelector('[name="extra_pet_breed_other"]').value.trim() : container.querySelector('[name="extra_pet_breed"]').value,
       coat_type: container.querySelector('[name="extra_pet_coat"]').value,
       life_stage: "",
       neutered_status: "",
-      service_type: selectedPrimaryService.name,
+      service_type: container.querySelector('[name="extra_pet_service"]').value,
+      grooming_option: container.querySelector('[name="extra_pet_grooming_option"]').value,
+      additional_services: [...container.querySelectorAll(".extra-additional-services input:checked")].map((input) => input.value),
       notes: container.querySelector('[name="extra_pet_notes"]').value,
       temperament: "Não informado"
     });
@@ -396,17 +406,18 @@ function currentPets(data = Object.fromEntries(new FormData(form).entries())) {
 }
 
 function serviceGroup(service) {
-  if (service === "Creche") return "creche";
-  if (service === "Hotel") return "hotel";
-  return "timed";
+  if (service === "Creche" || service === "Hotel") return "stay";
+  if (service === "Consulta Veterinária") return "veterinary";
+  return "grooming";
 }
 
-function bookingMode() {
-  return { group: serviceGroup(selectedPrimaryService.name) };
+function bookingMode(pets = currentPets()) {
+  const groups = [...new Set(pets.map((pet) => serviceGroup(pet.service_type)))];
+  return { group: groups[0] || serviceGroup(selectedPrimaryService.name), compatible: groups.length === 1 };
 }
 
 function durationForPet(pet) {
-  if (pet.service_type === "Consulta") return 30;
+  if (pet.service_type === "Consulta Veterinária") return 30;
   const size = pet.pet_size;
   const table = pet.service_type === "Banho"
     ? { Pequeno: 30, Médio: 45, Grande: 45, Gigante: 60 }
@@ -420,7 +431,7 @@ function totalDuration(pets = currentPets()) {
 
 function updateBookingMode() {
   const mode = bookingMode();
-  const isTimed = mode.group === "timed";
+  const isTimed = mode.group !== "stay";
   timedDateFields.classList.toggle("hidden", !isTimed);
   rangeDateFields.classList.toggle("hidden", isTimed);
   dateInput.required = isTimed;
@@ -431,27 +442,29 @@ function updateBookingMode() {
   dateMessage.textContent = isTimed ? "" : "A capacidade é validada para todo o período selecionado.";
   dateMessage.classList.remove("warning-text");
   if (isTimed) loadAvailability();
+  const needsGroomingOption = selectedPrimaryService.id === "banho-tosa";
+  groomingOptionFields.classList.toggle("hidden", !needsGroomingOption);
+  groomingOptionFields.querySelectorAll("input").forEach((input) => { input.required = needsGroomingOption; if (!needsGroomingOption) input.checked = false; });
 }
 
-
-function isRecentHistory(item) {
-  const time = new Date(item.saved_at || item.appointment_date).getTime();
-  const sixMonths = 1000 * 60 * 60 * 24 * 183;
-  return Number.isFinite(time) && Date.now() - time <= sixMonths;
+function updateBreedField() {
+  const isOther = petBreed.value === "Outro";
+  otherBreedField.classList.toggle("hidden", !isOther);
+  petBreedOther.required = isOther;
+  if (!isOther) petBreedOther.value = "";
 }
 
-function readStorage(key, fallback) {
-  try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
-  catch (error) { return fallback; }
+function estimatedPrice(pets = currentPets(), transportNeeded = transportOption.value !== "Não, vou levar até a loja") {
+  if (pets.some((pet) => serviceGroup(pet.service_type) === "stay")) return null;
+  const total = pets.reduce((sum, pet) => {
+    const service = PRIMARY_SERVICES.find((item) => item.name === pet.service_type);
+    const base = pet.service_type === "Banho e Tosa" ? pet.grooming_option === "Tosa na Tesoura" ? 110 : pet.grooming_option === "Tosa na Máquina" ? 90 : 0 : service?.price || 0;
+    const extras = ADDITIONAL_SERVICES.filter((item) => pet.additional_services.includes(item.name)).reduce((subtotal, item) => subtotal + item.price, 0);
+    return sum + base + extras;
+  }, 0);
+  return total + (transportNeeded ? 25 : 0);
 }
 
-function writeStorage(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
-}
-
-function normalizePhone(value) {
-  return String(value || "").replace(/\D/g, "");
-}
 
 function todayInSaoPaulo() {
   const parts = new Intl.DateTimeFormat("en-US", {

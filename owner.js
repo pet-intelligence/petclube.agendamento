@@ -24,7 +24,7 @@ const warning = document.querySelector("#owner-warning");
 init();
 
 function init() {
-  filterDate.value = new Date().toISOString().slice(0, 10);
+  filterDate.value = dateInSaoPaulo();
   filterStatus.innerHTML = ['<option value="">Todos</option>', ...STATUSES.map((status) => `<option>${escapeHtml(status)}</option>`)].join("");
   const actionsHeader = bookingsBody.closest("table")?.querySelector("thead th:last-child");
   if (actionsHeader) actionsHeader.textContent = "Próxima ação";
@@ -109,7 +109,7 @@ function renderBookings() {
       pet_size: booking.pet_size,
       service_type: service
     }];
-    const isStay = booking.service_group === "creche" || booking.service_group === "hotel";
+    const isStay = booking.service_group === "stay" || booking.service_group === "creche" || booking.service_group === "hotel";
     const schedule = isStay
       ? `<strong>Entrada: ${escapeHtml(formatDate(booking.entry_date))}</strong><span>Saída: ${escapeHtml(formatDate(booking.exit_date))}</span>`
       : `<strong>${escapeHtml(booking.scheduled_time || booking.appointment_hour || "")}</strong><span>${escapeHtml(formatDate(booking.scheduled_date || booking.appointment_date))}</span>`;
@@ -130,7 +130,7 @@ function renderBookings() {
           <small>${escapeHtml(booking.booking_id || booking.id || "")}</small>
         </td>
         <td>
-          ${pets.map((pet) => `<div class="owner-pet"><strong>${escapeHtml(pet.pet_name || "Pet não informado")}</strong><span>${escapeHtml(pet.pet_type || "Pet")} · ${escapeHtml(pet.pet_size || "Porte não informado")} · ${escapeHtml(pet.service_type || service)}</span><small>Pelagem: ${escapeHtml(profileLabel("coat", pet.coat_type))} · Fase: ${escapeHtml(profileLabel("life", pet.life_stage))} · Castrado(a): ${escapeHtml(profileLabel("neutered", pet.neutered_status))}</small></div>`).join("")}
+          ${pets.map((pet) => `<div class="owner-pet"><strong>${escapeHtml(pet.pet_name || "Pet não informado")}</strong><span>${escapeHtml(pet.pet_type || "Pet")} · ${escapeHtml(pet.pet_breed || booking.pet_breed || "Raça não informada")} · ${escapeHtml(pet.pet_size || "Porte não informado")} · ${escapeHtml(pet.service_type || service)}</span><small>Pelagem: ${escapeHtml(profileLabel("coat", pet.coat_type))} · Fase: ${escapeHtml(profileLabel("life", pet.life_stage))} · Castrado(a): ${escapeHtml(profileLabel("neutered", pet.neutered_status))}</small></div>`).join("")}
           <span>${escapeHtml(booking.tutor_name || "Tutor não informado")} · WhatsApp: ${escapeHtml(booking.tutor_phone || booking.whatsapp || "Não informado")}</span>
           ${meta.map(([label, value]) => `<small>${escapeHtml(label)}: ${escapeHtml(value)}</small>`).join("")}
         </td>
@@ -138,6 +138,7 @@ function renderBookings() {
           <strong>${escapeHtml(service)}</strong>
           ${isStay ? `<span>Total: ${escapeHtml(booking.pet_count || pets.length)} pet(s)</span>` : `<span>Duração total: ${escapeHtml(booking.calculated_duration_minutes || "Não informada")} min</span>`}
           <span>Adicionais: ${escapeHtml(additional)}</span>
+          ${booking.grooming_option ? `<span>Opção de tosa: ${escapeHtml(booking.grooming_option)}</span>` : ""}
           <span>Leva e traz: ${escapeHtml(transport)}</span>
           ${transportAction}
           ${address ? `<small>Endereço: ${escapeHtml(address)}</small>` : ""}
@@ -168,6 +169,7 @@ async function handleOwnerAction(event) {
     } catch (error) {
       warning.textContent = error.status === 401 ? "Acesso não autorizado" : error.message || "Não foi possível enviar o aviso de transporte.";
       warning.classList.remove("hidden");
+    } finally {
       transportButton.disabled = false;
     }
     return;
@@ -250,6 +252,12 @@ function normalizeStatus(status) {
   if (status === "Recebido") return "Novo";
   if (status === "Concluído") return "Finalizado";
   return "Novo";
+}
+
+function dateInSaoPaulo(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const value = (type) => parts.find((part) => part.type === type)?.value;
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 function formatDate(value) {
